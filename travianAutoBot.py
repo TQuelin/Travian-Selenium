@@ -8,6 +8,7 @@ Created on Sat Mar 26 12:26:40 2022
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 import time
+import numpy as np
 
 
 class TravianSeleniumApi:
@@ -34,6 +35,12 @@ class TravianSeleniumApi:
         
     def login(self):
         try:
+            # Accept cookies if there
+            self.driver.find_element(By.XPATH,'/html/body/div[1]/div[1]/div[2]/span[1]/a').click()
+        except:
+            pass
+        
+        try:
             userform = self.driver.find_element(By.XPATH,"/html/body/div[3]/div[2]/div[2]/div[2]/div/div/div[1]/form/table/tbody/tr[1]/td[2]/input")
             userform.clear()
             userform.send_keys(self.user)
@@ -47,6 +54,7 @@ class TravianSeleniumApi:
             print(self.console,'successfully logged in')
         except:
             print(self.console,'unsuccessfully logged in')
+
 
     def string2int(self,string):
         string2 = ""
@@ -90,15 +98,38 @@ class TravianSeleniumApi:
         string.pop(0)
         return list(map(self.string2int,string[:4]))
     
-    
     def get_actual_production(self):
         self.goToResourcesPage()
         production = self.driver.find_element(By.XPATH,'//*[@id="production"]')
         production = production.find_elements(By.XPATH,'//*[@class="num"]')
         nbre = [self.string2int(production[0].text),self.string2int(production[1].text),self.string2int(production[2].text),self.string2int(production[3].text)]
         return nbre
-        
-    
+
+
+    def get_village_list(self):
+        villages = self.driver.find_element(By.CLASS_NAME,'villageList')
+        villages = villages.find_elements(By.XPATH,'*//a')
+        villageList = ''
+        for village in villages:
+            viviId = village.get_attribute('href').split('=')[-1]
+            villageList.append(viviId)
+        self.villageList = villageList
+		
+    def goToVillage(self, number):
+        villageId = self.villageList[number]
+        self.driver.get('https://%s.travian.%s/dorf1.php?newid=%s'%(self.server,self.domain,villageId))
+			
+    def time_before_full(self):
+        ress = self.get_actual_resources()
+        capa = [self.get_warehouse_capacity(),self.get_granary_capacity()]
+        prod = self.get_actual_production()
+        ressmissing = np.append(capa[0]-np.array(ress[:3]),(capa[1]-ress[3]))
+        time_bf_full = ressmissing*3600//np.array(prod)
+        return time_bf_full
+
+    def is_full(self):
+        return not self.time_before_full().all()
+
     def is_busy(self):
         '''
         Returns
@@ -125,7 +156,32 @@ class TravianSeleniumApi:
             return 1
         except:
             return 0
+        
+    def upgrade_faster(self,solarId):
+        self.driver.get('https://%s.travian.%s/build.php?id=%d'%(self.server,self.domain,solarId))
+        try :
+            button = self.driver.find_element(By.XPATH,'//*[@class="textButtonV1 green build videoFeatureButton"]')
+            button.click()
+            time.sleep(20)
+            return 1
+        except:
+            return 0
+        
     
+    def new_building(self,building,solarId):
+        self.driver.get('https://%s.travian.%s/build.php?id=%d'%(self.server,self.domain,solarId))
+        builds = self.driver.find_elements(By.CLASS_NAME,'buildingWrapper')
+        flag = False
+        for build in builds:
+            if build.find_element(By.XPATH,'h2').text == building:
+                print(self.console,'Creating ',build.find_element(By.XPATH,'h2').text)
+                build.find_element(By.XPATH,'*//button').click()
+                flag = True
+                break
+        if not(flag):
+            print('%s is not existing'%building)
+    
+
     
     def upgrade_needs(self,solarId):
         self.driver.get('https://%s.travian.%s/build.php?id=%d'%(self.server,self.domain,solarId))
@@ -219,6 +275,13 @@ class TravianSeleniumApi:
         forms[number].submit()
         print(self.console,'Adventure n°%d started'%number)
         
+    def get_field_levels(self):
+        self.goToResourcesPage()
+        levelsa=self.driver.find_elements(By.XPATH,'/html/body/div[3]/div[3]/div[2]/div/div[1]/a')[1:]
+        levels=[]
+        for level in levelsa:
+            levels.append(int(level.text))
+        return levels
     
     def example(self):
         #value = self.driver.find_element(By.XPATH,'')
